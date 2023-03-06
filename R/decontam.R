@@ -182,6 +182,7 @@ setMethod("isContaminant", signature = c(seqtab = "ANY"),
     else if(is.null(conc) && !is.null(neg)) method <- "prevalence"
     else method <- "combined"
   }
+  frequency.method <- match.arg(frequency.method)
   do.freq <- FALSE; do.prev <- FALSE; p.freq <- NA; p.prev <- NA
   if(method %in% c("frequency", "minimum", "combined", "minimum", "either", "both")) do.freq <- TRUE
   if(method %in% c("prevalence", "combined", "minimum", "either", "both")) do.prev <- TRUE

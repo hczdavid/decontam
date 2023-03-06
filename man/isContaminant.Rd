@@ -11,8 +11,10 @@ isContaminant(seqtab, ...)
   seqtab,
   conc = NULL,
   neg = NULL,
-  method = c("auto", "frequency", "prevalence", "combined", "minimum", "either",
-    "both"),
+  method = c("auto", "frequency", "prevalence", "combined", "minimum", "either", "both"),
+  frequency.method = c("decontam", "tcontam", "tcontamL"),
+  tcontamLcut = 0.05,
+  iteration = 5000,
   batch = NULL,
   batch.combine = c("minimum", "product", "fisher"),
   threshold = 0.1,
@@ -51,6 +53,21 @@ phyloseq object can be provided.}
   \item{either}{Contaminants are called if identified by either the frequency or prevalance methods.}
   \item{both}{Contaminants are called if identified by both the frequency and prevalance methods.}
 }}
+
+\item{frequency.method}{\code{character}. The method used to test for contaminants.
+#' \describe{
+  \item{decontam}{(Default). The original decontam frequency method from Davis et al. 2018. The output "p" is a p-score, not a p-value}
+  \item{tcontam}{The hypothesis testing method to identify contaminants for samples with high microbial biomass.
+  This is directly extended from decontam frequency method. The output "p" is a valid p-value}
+  \item{tcontamL}{The correted hypothesis testing approach for low and mixed microbial biomass samples. It includes two steps.
+  In the first step, it runs tcontam and then estimate the proportion of contaminants in each sample given a internal cutoff (tcontamLcut, see below).
+  At step 2, it performs an updated hypothesis test with the estimated proportion of contaminants. Like tcontam, a p-value is reported in the output.}
+
+}}
+
+\item{tcontamLcut}{\code{numeric}. The internal cutoff for tcontamL method to estimate the proportion of contaminates.}
+
+\item{iteration}{\code{numeric}.The number of iterations of the resampling procedure for tcontam and tcontamL when the sample size is 2.}
 
 \item{batch}{(Optional). \code{factor}, or any type coercible to a \code{factor}. Default NULL.
 If provided, should be a vector of length equal to the number of input samples which specifies which batch
@@ -92,6 +109,7 @@ conc <- c(6413, 3581.0, 5375, 4107, 4291, 4260, 4171, 2765, 33, 48)
 neg <- c(FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, TRUE)
 # Use frequency or frequency and prevalence to identify contaminants
 isContaminant(st, conc=conc, method="frequency", threshold=0.2)
+isContaminant(st, conc=conc, method="frequency", frequency.method = "tcontam", threshold=0.05)
 isContaminant(st, conc=conc, neg=neg, method="both", threshold=c(0.1,0.5))
 
 }

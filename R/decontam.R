@@ -32,6 +32,22 @@
 #'   \item{both}{Contaminants are called if identified by both the frequency and prevalance methods.}
 #' }
 #'
+#' @param frequency.method \code{character}. The method used to test for contaminants.
+#' #' \describe{
+#'   \item{decontam}{(Default). The original decontam frequency method from Davis et al. 2018. The output "p" is a p-score, not a p-value}
+#'   \item{tcontam}{The hypothesis testing method to identify contaminants for samples with high microbial biomass.
+#'   This is directly extended from decontam frequency method. The output "p" is a valid p-value}
+#'   \item{tcontamL}{The correted hypothesis testing approach for low and mixed microbial biomass samples. It includes two steps.
+#'   In the first step, it runs tcontam and then estimate the proportion of contaminants in each sample given a internal cutoff (tcontamLcut, see below).
+#'   At step 2, it performs an updated hypothesis test with the estimated proportion of contaminants. Like tcontam, a p-value is reported in the output.}
+#'
+#' }
+#'
+#' @param tcontamLcut \code{numeric}. The internal cutoff for tcontamL method to estimate the proportion of contaminates.
+#'
+#' @param iteration \code{numeric}.The number of iterations of the resampling procedure for tcontam and tcontamL when the sample size is 2.
+#'
+#'
 #' @param batch (Optional). \code{factor}, or any type coercible to a \code{factor}. Default NULL.
 #' If provided, should be a vector of length equal to the number of input samples which specifies which batch
 #' each sample belongs to (eg. sequencing run). Contaminants identification will be performed independently
@@ -76,6 +92,7 @@
 #' neg <- c(FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, TRUE)
 #' # Use frequency or frequency and prevalence to identify contaminants
 #' isContaminant(st, conc=conc, method="frequency", threshold=0.2)
+#' isContaminant(st, conc=conc, method="frequency", frequency.method = "tcontam", threshold=0.05)
 #' isContaminant(st, conc=conc, neg=neg, method="both", threshold=c(0.1,0.5))
 #'
 NULL
@@ -93,6 +110,9 @@ setMethod("isContaminant", signature = c(seqtab = "ANY"),
            conc = NULL,
            neg = NULL,
            method = c("auto", "frequency", "prevalence", "combined", "minimum", "either", "both"),
+           frequency.method = c("decontam", "tcontam", "tcontamL"),
+           tcontamLcut = 0.05,
+           iteration = 5000,
            batch = NULL,
            batch.combine = c("minimum", "product", "fisher"),
            threshold = 0.1,
@@ -109,6 +129,9 @@ setMethod("isContaminant", signature = c(seqtab = "ANY"),
                     conc = conc,
                     neg = neg,
                     method = method,
+                    frequency.method = frequency.method,
+                    tcontamLcut = tcontamLcut,
+                    iteration = iteration,
                     batch = batch,
                     batch.combine = batch.combine,
                     threshold = threshold,
@@ -119,6 +142,9 @@ setMethod("isContaminant", signature = c(seqtab = "ANY"),
                     conc = conc,
                     neg = neg,
                     method = method,
+                    frequency.method = frequency.method,
+                    tcontamLcut = tcontamLcut,
+                    iteration = iteration,
                     batch = batch,
                     batch.combine = batch.combine,
                     threshold = threshold,
@@ -131,6 +157,9 @@ setMethod("isContaminant", signature = c(seqtab = "ANY"),
                             conc = NULL,
                             neg = NULL,
                             method = c("auto", "frequency", "prevalence", "combined", "minimum", "either", "both"),
+                            frequency.method = c("decontam", "tcontam", "tcontamL"),
+                            tcontamLcut = 0.05,
+                            iteration = 5000,
                             batch = NULL,
                             batch.combine = c("minimum", "product", "fisher"),
                             threshold = 0.1,
@@ -193,9 +222,30 @@ setMethod("isContaminant", signature = c(seqtab = "ANY"),
   p.prevs <- matrix(NA, nrow=nlevels(batch), ncol=ncol(seqtab))
   rownames(p.prevs) <- levels(batch)
   for(bat in levels(batch)) {
-    # Calculate frequency p-value
+
     if(do.freq) {
-      p.freqs[bat,] <- apply(seqtab[batch==bat & !neg,], 2, isContaminantFrequency, conc=conc[batch==bat & !neg])
+
+      if(frequency.method == "decontam"){
+
+        p.freqs[bat,] <- apply(seqtab[batch==bat & !neg,], 2, isContaminantFrequency, conc=conc[batch==bat & !neg])
+
+        }else if(frequency.method == "tcontam"){
+
+          p.freqs[bat,] <- apply(seqtab[batch==bat & !neg,], 2, isContaminantFrequencyTest, conc=conc[batch==bat & !neg], iteration = iteration)
+
+        }else if(frequency.method == "tcontamL"){
+
+          myseq         <- seqtab[batch==bat & !neg,]
+          p.freqs[bat,] <- apply(myseq, 2, isContaminantFrequencyTest, conc=conc[batch==bat & !neg], iteration = iteration)
+          contind       <- which(p.freqs[bat,] < tcontamLcut)
+          pcont         <- rowSums(myseq[,contind,drop = FALSE])/rowSums(myseq[,-contind,drop = FALSE])
+          p.freqs[bat,] <- apply(myseq, 2, isContaminantFrequencyTest, conc=conc[batch==bat & !neg], iteration = iteration, pcont = pcont)
+
+        }
+
+      else{
+        stop("Invalid frequency method. Should be 'decontam', 'tcontam', or 'tcontamL'.")
+      }
     }
     # Calculate prevalence p-value
     if(do.prev) {
@@ -274,6 +324,54 @@ isContaminantFrequency <- function(freq, conc) {
   }
   return(pval)
 }
+
+
+
+#' @importFrom stats lm
+#' @importFrom stats pt
+#'
+#' @keywords internal
+isContaminantFrequencyTest <- function(freq, conc, pcont = NULL, iteration = iteration) {
+
+  df <- data.frame(logc=log(conc), logf=log(freq))
+  df <- df[!is.na(freq) & freq>0,]
+
+  nn <- nrow(df)
+
+  b = 0
+  if(!is.null(pcont)){
+    if(length(pcont) == 1){
+      b = pcont
+    }else{
+      b = mean(pcont[!is.na(freq) & freq>0])
+    }
+  }
+
+  if(nn > 2) { # random set
+
+    # get p-value from t-test
+    fit.lm   <- lm(logf~logc, data = df)
+    fit.coef <- summary(fit.lm)$coef
+    DF       <- fit.lm$df.residual
+    pval     <- pt((fit.coef[2,1] + 0.5 - 0.5*b)/fit.coef[2,2],DF)
+
+  } else if (nn == 2){
+
+    # get p-value from permutation
+
+    varxy  <- apply(df, 2, var)
+    rvalue <- var(rowSums(df))/var(df$logf)
+
+    pval   <- get_nullP(rvalue = rvalue, varx = varxy[2], vary = varxy[1], n = 2, iteration = iteration) # varx: variance of logf; vary: variance of logc
+
+  } else {
+
+    pval <- NA
+
+  }
+  return(pval)
+}
+
 #' @importFrom stats fisher.test
 #' @importFrom stats prop.test
 #'
@@ -305,6 +403,45 @@ isContaminantPrevalence <- function(freq, neg, method="auto") {
   }
   return(pval)
 }
+
+
+
+#' @keywords internal
+get_null_corxyx <- function(varx,vary){corxy <- 1 - 0.5*vary/varx; matrix(c(1, corxy,corxy,1), nrow = 2)}
+
+#' @keywords internal
+get_null_sample <- function(varx,vary, n, iteration){
+
+  corxyx     <- get_null_corxyx(varx, vary)
+  nullsample <- rep(NA, iteration)
+  sapply(nullsample, function(x){
+
+    if(n <= 1){
+      rchisq(1, df = n-1)/rchisq(1, df = n-1)
+    }else{
+      mys <- MASS::mvrnorm(n = n-1, mu = rep(0, 2), tol = 1e-6, Sigma = corxyx, empirical = F)
+      if(is.vector(mys)){mys = t(as.matrix(mys))}
+      mycols <- colSums(mys^2)
+      mycols[1] / mycols[2]
+    }
+
+  })
+}
+
+
+#' @keywords internal
+get_nullP <- function(rvalue, varx, vary, n, iteration){
+
+  if(vary >= 4*varx){
+    #warning("Variance of Y is 4 times large than variance x! Samples under the null is not valid!")
+    return(1)
+  }
+
+  nullsample <- get_null_sample(varx, vary, n, iteration = iteration)
+  sum(nullsample < rvalue)/iteration
+
+}
+
 # fisher.test(matrix(c(1,10,40,40), nrow=2), alternative="greater")
 # contingency table, test is whether the first entry is less than expected under fixed marginals
 # so, is there a lower fraction of the first column in row 1 than row 2

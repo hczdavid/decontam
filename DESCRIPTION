@@ -34,4 +34,4 @@ biocViews: ImmunoOncology, Microbiome, Sequencing, Classification, Metagenomics
 URL: https://github.com/benjjneb/decontam
 BugReports: https://github.com/benjjneb/decontam/issues
 LazyData: true
-RoxygenNote: 7.1.1
+RoxygenNote: 7.2.3

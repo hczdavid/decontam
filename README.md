@@ -19,7 +19,7 @@ We demonstrate the usage of tcontam and tcontamL, and compare the performance wi
 
 [Simulation analysis](http://htmlpreview.github.io/?https://github.com/hczdavid/tcontamManuscript/blob/main/analysis/simulation/simu_analysis.html)
 
-
+The data used for these analyses can be found at the [tcontamManuscript repository](https://github.com/hczdavid/tcontamManuscript).
 
 
 

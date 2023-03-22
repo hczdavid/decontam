@@ -88,10 +88,14 @@
 #' # Use frequency or frequency and prevalence to identify contaminants
 #' isContaminant(st, conc=conc, method="frequency", threshold=0.2)
 #' isContaminant(st, conc=conc, neg=neg, method="both", threshold=c(0.1,0.5))
-#'
-#' # Use tcontam and tcontamL methods
-#' isContaminant(st, conc=conc, method="frequency", frequency.method = "tcontam")
-#' isContaminant(st, conc=conc, method="frequency", frequency.method = "tcontamL")
+
+#' # Use tcontam and tcontamL methods for a subset of the dataset
+#' stsub <- st[, 1:100]
+#' isContaminant(stsub, conc=conc, method="frequency", frequency.method = "tcontam")
+#' isContaminant(stsub, conc=conc, method="frequency", frequency.method = "tcontamL")
+#' isContaminant(stsub, conc=conc, neg=neg, method="either", frequency.method = "tcontam", threshold=c(0.1,0.5))
+#' isContaminant(stsub, conc=conc, neg=neg, method="both", frequency.method = "tcontamL", threshold=c(0.1,0.5))
+
 
 NULL
 
@@ -222,14 +226,23 @@ setMethod("isContaminant", signature = c(seqtab = "ANY"),
 
         }else if(frequency.method == "tcontam"){
 
+          nsize2 <- sum(colSums(seqtab[batch==bat & !neg,] !=0) == 2)
+          if(nsize2 > 0){
+            message(paste0("Permutation p-values are calculated for ", nsize2, " ASVs or taxanomic features with only two non-zero samples using tcontam method."))
+          }
           p.freqs[bat,] <- apply(seqtab[batch==bat & !neg,], 2, isContaminantFrequencyTest, conc=conc[batch==bat & !neg], iteration = 5000)
 
         }else if(frequency.method == "tcontamL"){
 
+          nsize2 <- sum(colSums(seqtab[batch==bat & !neg,] !=0) == 2)
+          if(nsize2 > 0){
+            message(paste0("Permutation p-values are calculated for ", nsize2, " ASVs or taxanomic features with only two non-zero samples using tcontamL method."))
+          }
+
+          message("tcontamL is implemented. The threshold arguement is also used as an internal cutoff to estimate the proportion of contaminants in each sample. Go to help page for details.")
           myseq         <- seqtab[batch==bat & !neg,]
           p.freqs[bat,] <- apply(myseq, 2, isContaminantFrequencyTest, conc=conc[batch==bat & !neg], iteration = 5000)
           contind       <- which(p.freqs[bat,] < threshold[1])
-          message("tcontamL is implemented. The threshold arguement is also used as an internal cutoff to estimate the proportion of contaminants in each sample. Go to help page for details.")
           if(length(contind) != 0){
             pcont <- rowSums(myseq[,contind,drop = FALSE])/rowSums(myseq[,-contind,drop = FALSE])
           }else{
@@ -353,7 +366,6 @@ isContaminantFrequencyTest <- function(freq, conc, pcont = NULL, iteration) {
 
   } else if (nn == 2){
 
-    message("Permutation is used to calculated p-values for the ASV or feature with only two samples.")
     # get p-value from permutation
 
     varxy  <- apply(df, 2, var)

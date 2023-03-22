@@ -104,8 +104,10 @@ neg <- c(FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, TRUE)
 # Use frequency or frequency and prevalence to identify contaminants
 isContaminant(st, conc=conc, method="frequency", threshold=0.2)
 isContaminant(st, conc=conc, neg=neg, method="both", threshold=c(0.1,0.5))
-
-# Use tcontam and tcontamL methods
-isContaminant(st, conc=conc, method="frequency", frequency.method = "tcontam")
-isContaminant(st, conc=conc, method="frequency", frequency.method = "tcontamL")
+# Use tcontam and tcontamL methods for a subset of the dataset
+stsub <- st[, 1:100]
+isContaminant(stsub, conc=conc, method="frequency", frequency.method = "tcontam")
+isContaminant(stsub, conc=conc, method="frequency", frequency.method = "tcontamL")
+isContaminant(stsub, conc=conc, neg=neg, method="either", frequency.method = "tcontam", threshold=c(0.1,0.5))
+isContaminant(stsub, conc=conc, neg=neg, method="both", frequency.method = "tcontamL", threshold=c(0.1,0.5))
 }
